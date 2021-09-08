@@ -371,8 +371,8 @@ HttpEngine.prototype.step = function step(requestSpec, ee, opts) {
         let defaultHeaders;
         let combinedHeaders;
         if(config.caseSensitive) {
-          let defaultHeaders = (config.defaults.headers || {'user-agent': USER_AGENT});
-          const combinedHeaders = _.extend(defaultHeaders, params.headers, requestParams.headers);
+          defaultHeaders = (config.defaults.headers || {'user-agent': USER_AGENT});
+          combinedHeaders = _.extend(defaultHeaders, params.headers, requestParams.headers);
         }else{
           defaultHeaders = lowcaseKeys(config.defaults.headers || {'user-agent': USER_AGENT});
           combinedHeaders = _.extend(defaultHeaders, lowcaseKeys(params.headers), lowcaseKeys(requestParams.headers));
