@@ -590,36 +590,38 @@ HttpEngine.prototype.step = function step(requestSpec, ee, opts) {
         const startedAt = process.hrtime(); // TODO: use built-in timing API
 
         request(requestParams, maybeCallback)
-        .on('request', function(req) {
-          debugRequests('request start: %s', req.path);
-          ee.emit('request');
+          .on('request', function(req) {
+            debugRequests('request start: %s', req.path);
+            ee.emit('counter', 'engine.http.requests', 1);
+            ee.emit('rate', 'engine.http.request_rate');
+            req.on('response', function(res) {
+              self._handleResponse(requestParams.url, res, ee, context, maybeCallback, startedAt, callback);
+            });
+          }).on('end', function() {
+            context._successCount++;
 
-          const startedAt = process.hrtime();
-
-          req.on('response', function updateLatency(res) {
-            let code = res.statusCode;
-            const endedAt = process.hrtime(startedAt);
-            let delta = (endedAt[0] * 1e9) + endedAt[1];
-            debugRequests('request end: %s', req.path);
-            ee.emit('response', delta, code, context._uid);
-          });
-        }).on('end', function() {
-          context._successCount++;
-
-          if (!maybeCallback) {
-            callback(null, context);
-          } // otherwise called from requestCallback
-        }).on('error', function(err) {
-          debug(err);
-
-          // Run onError hooks and end the scenario
-          runOnErrorHooks(onErrorHandlers, config.processor, err, requestParams, context, ee, function(asyncErr) {
-            let errCode = err.code || err.message;
-            ee.emit('error', errCode);
-            return callback(err, context);
-          });
-        });
-    }); // eachSeries
+            if (!maybeCallback) {
+              callback(null, context);
+            } // otherwise called from requestCallback
+          }).on('error', function(err, body, res) {
+            if (err.name === 'HTTPError') {
+              return;
+            }
+            // this is an ENOTFOUND, ECONNRESET etc
+            debug(err);
+            // Run onError hooks and end the scenario:
+            runOnErrorHooks(onErrorHandlers, config.processor, err, requestParams, context, ee, function(asyncErr) {
+              let errCode = err.code || err.message;
+              ee.emit('error', errCode);
+              return callback(err, context);
+            });
+          })
+        // .catch((gotErr) => {
+        //   // TODO: Handle the error properly with run hooks
+        //   ee.emit('error', gotErr.code || gotErr.message);
+        //   return callback(gotErr, context);
+        // });
+      }); // eachSeries
   };
 
   return f;
@@ -687,14 +689,8 @@ HttpEngine.prototype.setInitialContext = function(initialContext) {
       maxSockets: 1,
       maxFreeSockets: 1
     });
-
-    const agents = createAgents({
-      http: process.env.HTTP_PROXY,
-      https: process.env.HTTPS_PROXY
-    }, agentOpts);
-
-    initialContext._httpAgent = agents.httpAgent;
-    initialContext._httpsAgent = agents.httpsAgent;
+    initialContext._httpAgent = new http.Agent(agentOpts);
+    initialContext._httpsAgent = new https.Agent(agentOpts);
   }
   return initialContext;
 };
@@ -704,6 +700,7 @@ HttpEngine.prototype.compile = function compile(tasks, scenarioSpec, ee) {
 
   return function scenario(initialContext, callback) {
     initialContext = self.setInitialContext(initialContext);
+
     let steps = _.flatten([
       function zero(cb) {
         ee.emit('started');
