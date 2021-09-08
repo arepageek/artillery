@@ -6,7 +6,7 @@
 
 const async = require('async');
 const _ = require('lodash');
-const request = require('request');
+const request = require('got-caseless');
 const tough = require('tough-cookie');
 const debug = require('debug')('http');
 const debugRequests = require('debug')('http:request');
@@ -16,6 +16,9 @@ const USER_AGENT = 'Artillery (https://artillery.io)';
 const engineUtil = require('./engine_util');
 const ensurePropertyIsAList = engineUtil.ensurePropertyIsAList;
 const template = engineUtil.template;
+const http = require('http');
+const https = require('https');
+const fs = require('fs');
 const qs = require('querystring');
 const filtrex = require('filtrex');
 const urlparse = require('url').parse;
@@ -24,8 +27,6 @@ const HttpAgent = require('agentkeepalive');
 const { HttpsAgent } = HttpAgent;
 const { HttpProxyAgent, HttpsProxyAgent } = require('hpagent');
 const decompressResponse = require('decompress-response');
-const http = require('http');
-const https = require('https');
 
 module.exports = HttpEngine;
 
@@ -33,6 +34,45 @@ const DEFAULT_AGENT_OPTIONS = {
   keepAlive: true,
   keepAliveMsec: 1000
 };
+
+function createAgents(proxies, opts) {
+  const agentOpts = Object.assign({}, DEFAULT_AGENT_OPTIONS, opts);
+
+  const result = {
+    httpAgent: null,
+    httpsAgent: null
+  };
+
+  // HTTP proxy endpoint will be used for all requests, unless a separate
+  // HTTPS proxy URL is also set, which will be used for HTTPS requests:
+  if (proxies.http) {
+    agentOpts.proxy = proxies.http;
+    result.httpAgent = new HttpProxyAgent(agentOpts);
+
+    if (proxies.https) {
+      agentOpts.proxy = proxies.https;
+    }
+
+    result.httpsAgent = new HttpsProxyAgent(agentOpts);
+    return result;
+  }
+
+  // If only HTTPS proxy is provided, it will be used for HTTPS requests,
+  // but not for HTTP requests:
+  if (proxies.https) {
+    result.httpAgent = new HttpAgent(agentOpts);
+    result.httpsAgent = new HttpsProxyAgent(Object.assign(
+      { proxy: proxies.https },
+      agentOpts));
+
+    return result;
+  }
+
+  // By default nothing is proxied:
+  result.httpAgent = new HttpAgent(agentOpts);
+  result.httpsAgent = new HttpsAgent(agentOpts);
+  return result;
+}
 
 function HttpEngine(script) {
   this.config = script.config;
@@ -58,8 +98,14 @@ function HttpEngine(script) {
     maxSockets: this.maxSockets,
     maxFreeSockets: this.maxSockets
   });
-  this._httpAgent = new http.Agent(agentOpts);
-  this._httpsAgent = new https.Agent(agentOpts);
+
+  const agents = createAgents({
+    http: process.env.HTTP_PROXY,
+    https: process.env.HTTPS_PROXY
+  }, agentOpts);
+
+  this._httpAgent = agents.httpAgent;
+  this._httpsAgent = agents.httpsAgent;
 }
 
 HttpEngine.prototype.createScenario = function(scenarioSpec, ee) {
@@ -546,7 +592,7 @@ HttpEngine.prototype.step = function step(requestSpec, ee, opts) {
         requestParams.retry = 0; // disable retries - ignored when using streams
         const startedAt = process.hrtime(); // TODO: use built-in timing API
 
-        request(requestParams, maybeCallback)
+        request(requestParams)
           .on('request', function(req) {
             debugRequests('request start: %s', req.path);
             ee.emit('counter', 'engine.http.requests', 1);
@@ -554,12 +600,6 @@ HttpEngine.prototype.step = function step(requestSpec, ee, opts) {
             req.on('response', function(res) {
               self._handleResponse(requestParams.url, res, ee, context, maybeCallback, startedAt, callback);
             });
-          }).on('end', function() {
-            context._successCount++;
-
-            if (!maybeCallback) {
-              callback(null, context);
-            } // otherwise called from requestCallback
           }).on('error', function(err, body, res) {
             if (err.name === 'HTTPError') {
               return;
@@ -573,11 +613,11 @@ HttpEngine.prototype.step = function step(requestSpec, ee, opts) {
               return callback(err, context);
             });
           })
-        // .catch((gotErr) => {
-        //   // TODO: Handle the error properly with run hooks
-        //   ee.emit('error', gotErr.code || gotErr.message);
-        //   return callback(gotErr, context);
-        // });
+        .catch((gotErr) => {
+          // TODO: Handle the error properly with run hooks
+          ee.emit('error', gotErr.code || gotErr.message);
+          return callback(gotErr, context);
+        });
       }); // eachSeries
   };
 
@@ -646,8 +686,14 @@ HttpEngine.prototype.setInitialContext = function(initialContext) {
       maxSockets: 1,
       maxFreeSockets: 1
     });
-    initialContext._httpAgent = new http.Agent(agentOpts);
-    initialContext._httpsAgent = new https.Agent(agentOpts);
+
+    const agents = createAgents({
+      http: process.env.HTTP_PROXY,
+      https: process.env.HTTPS_PROXY
+    }, agentOpts);
+
+    initialContext._httpAgent = agents.httpAgent;
+    initialContext._httpsAgent = agents.httpsAgent;
   }
   return initialContext;
 };
@@ -657,7 +703,6 @@ HttpEngine.prototype.compile = function compile(tasks, scenarioSpec, ee) {
 
   return function scenario(initialContext, callback) {
     initialContext = self.setInitialContext(initialContext);
-
     let steps = _.flatten([
       function zero(cb) {
         ee.emit('started');
