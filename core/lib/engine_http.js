@@ -34,45 +34,6 @@ const DEFAULT_AGENT_OPTIONS = {
   keepAliveMsec: 1000
 };
 
-function createAgents(proxies, opts) {
-  const agentOpts = Object.assign({}, DEFAULT_AGENT_OPTIONS, opts);
-
-  const result = {
-    httpAgent: null,
-    httpsAgent: null
-  };
-
-  // HTTP proxy endpoint will be used for all requests, unless a separate
-  // HTTPS proxy URL is also set, which will be used for HTTPS requests:
-  if (proxies.http) {
-    agentOpts.proxy = proxies.http;
-    result.httpAgent = new HttpProxyAgent(agentOpts);
-
-    if (proxies.https) {
-      agentOpts.proxy = proxies.https;
-    }
-
-    result.httpsAgent = new HttpsProxyAgent(agentOpts);
-    return result;
-  }
-
-  // If only HTTPS proxy is provided, it will be used for HTTPS requests,
-  // but not for HTTP requests:
-  if (proxies.https) {
-    result.httpAgent = new HttpAgent(agentOpts);
-    result.httpsAgent = new HttpsProxyAgent(Object.assign(
-      { proxy: proxies.https },
-      agentOpts));
-
-    return result;
-  }
-
-  // By default nothing is proxied:
-  result.httpAgent = new HttpAgent(agentOpts);
-  result.httpsAgent = new HttpsAgent(agentOpts);
-  return result;
-}
-
 function HttpEngine(script) {
   this.config = script.config;
 
