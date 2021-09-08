@@ -6,7 +6,7 @@
 
 const async = require('async');
 const _ = require('lodash');
-const request = require('got');
+const request = require('request');
 const tough = require('tough-cookie');
 const debug = require('debug')('http');
 const debugRequests = require('debug')('http:request');
