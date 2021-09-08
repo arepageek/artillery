@@ -97,14 +97,8 @@ function HttpEngine(script) {
     maxSockets: this.maxSockets,
     maxFreeSockets: this.maxSockets
   });
-
-  const agents = createAgents({
-    http: process.env.HTTP_PROXY,
-    https: process.env.HTTPS_PROXY
-  }, agentOpts);
-
-  this._httpAgent = agents.httpAgent;
-  this._httpsAgent = agents.httpsAgent;
+  this._httpAgent = new http.Agent(agentOpts);
+  this._httpsAgent = new https.Agent(agentOpts);
 }
 
 HttpEngine.prototype.createScenario = function(scenarioSpec, ee) {
