@@ -24,6 +24,8 @@ const HttpAgent = require('agentkeepalive');
 const { HttpsAgent } = HttpAgent;
 const { HttpProxyAgent, HttpsProxyAgent } = require('hpagent');
 const decompressResponse = require('decompress-response');
+const http = require('http');
+const https = require('https');
 
 module.exports = HttpEngine;
 
