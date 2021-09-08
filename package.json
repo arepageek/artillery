@@ -57,7 +57,7 @@
     "esprima": "^4.0.0",
     "filtrex": "^0.5.4",
     "form-data": "^2.3.3",
-    "got": "https://github.com/arepageek/got/#case_insensitive",
+    "got": "https://github.com/arepageek/got/#case_insensitive_v11.8.1",
     "hpagent": "^0.1.1",
     "is-ci": "^2.0.0",
     "js-yaml": "^3.13.1",
