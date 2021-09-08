@@ -616,11 +616,11 @@ HttpEngine.prototype.step = function step(requestSpec, ee, opts) {
               return callback(err, context);
             });
           })
-        .catch((gotErr) => {
-          // TODO: Handle the error properly with run hooks
-          ee.emit('error', gotErr.code || gotErr.message);
-          return callback(gotErr, context);
-        });
+        // .catch((gotErr) => {
+        //   // TODO: Handle the error properly with run hooks
+        //   ee.emit('error', gotErr.code || gotErr.message);
+        //   return callback(gotErr, context);
+        // });
       }); // eachSeries
   };
 
